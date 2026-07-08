@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Sync Embed Player</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            overflow: hidden;
+        }
+        #player {
+            width: 100vw;
+            height: 100vh;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="player"></div>
+
+    <script>
+        // Parse URL Parameters
+        const params = new URLSearchParams(window.location.search);
+        const videoId = params.get('videoId');
+        const roomId = params.get('roomId');
+        const sessionToken = params.get('sessionToken');
+
+        let player = null;
+        let wsConn = null;
+        let isRemoteEvent = false;
+        let lastTime = 0;
+        let lastSpeed = 1.0;
+
+        // Load YouTube Iframe Player API
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                height: '100%',
+                width: '100%',
+                videoId: videoId || '',
+                playerVars: {
+                    'autoplay': 1,
+                    'controls': 1,
+                    'rel': 0,
+                    'showinfo': 0,
+                    'modestbranding': 1,
+                    'enablejsapi': 1,
+                    'origin': window.location.origin
+                },
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            // If roomId is present, connect to WebSocket sync channel
+            if (roomId && sessionToken) {
+                connectToWebSocket();
+            }
+
+            // Periodic sync check to monitor timeline seeks and speed shifts
+            setInterval(() => {
+                if (!player || typeof player.getCurrentTime !== 'function') return;
+                
+                const currentTime = player.getCurrentTime();
+                const currentSpeed = player.getPlaybackRate();
+                const state = player.getPlayerState();
+
+                if (state === YT.PlayerState.PLAYING) {
+                    const expectedProgression = 0.5 * currentSpeed; // 500ms interval
+                    const timeDiff = Math.abs(currentTime - lastTime - expectedProgression);
+                    
+                    // Detect seek
+                    if (timeDiff > 2.0 && !isRemoteEvent) {
+                        console.log("Seek detected locally, syncing...", currentTime);
+                        sendPartySync('seek', currentTime, currentSpeed);
+                    }
+                }
+
+                // Detect speed change
+                if (currentSpeed !== lastSpeed && !isRemoteEvent) {
+                    console.log("Speed change detected locally, syncing...", currentSpeed);
+                    sendPartySync('speed', currentTime, currentSpeed);
+                }
+
+                lastTime = currentTime;
+                lastSpeed = currentSpeed;
+            }, 500);
+        }
+
+        // Catch play/pause state triggers
+        function onPlayerStateChange(event) {
+            if (isRemoteEvent) return;
+
+            const currentTime = player.getCurrentTime();
+            const currentSpeed = player.getPlaybackRate();
+
+            if (event.data === YT.PlayerState.PLAYING) {
+                console.log("Play state detected locally, syncing...");
+                sendPartySync('play', currentTime, currentSpeed);
+            } else if (event.data === YT.PlayerState.PAUSED) {
+                console.log("Pause state detected locally, syncing...");
+                sendPartySync('pause', currentTime, currentSpeed);
+            }
+        }
+
+        // ================= WEBSOCKET SYNC CLIENT =================
+
+        function connectToWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/?sessionToken=${encodeURIComponent(sessionToken)}&roomId=${encodeURIComponent(roomId)}`;
+            
+            wsConn = new WebSocket(wsUrl);
+
+            wsConn.onopen = () => {
+                console.log("Embedded Player connected to Watch Party room:", roomId);
+            };
+
+            wsConn.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'sync') {
+                        handleRemoteSyncEvent(data);
+                    }
+                } catch (err) {
+                    console.error("Parse sync error:", err);
+                }
+            };
+
+            wsConn.onclose = () => {
+                console.log("Embedded Player WebSocket disconnected. Retrying in 3s...");
+                setTimeout(connectToWebSocket, 3000);
+            };
+        }
+
+        function sendPartySync(action, time, speed) {
+            if (!wsConn || wsConn.readyState !== WebSocket.OPEN) return;
+            
+            wsConn.send(JSON.stringify({
+                type: 'sync',
+                action: action,
+                time: time,
+                speed: speed
+            }));
+        }
+
+        function handleRemoteSyncEvent(data) {
+            if (!player || typeof player.getPlayerState !== 'function') return;
+
+            isRemoteEvent = true;
+
+            const state = player.getPlayerState();
+            
+            if (data.action === 'play') {
+                if (Math.abs(player.getCurrentTime() - data.time) > 2.0) {
+                    player.seekTo(data.time, true);
+                }
+                if (state !== YT.PlayerState.PLAYING) {
+                    player.playVideo();
+                }
+            } else if (data.action === 'pause') {
+                if (state !== YT.PlayerState.PAUSED) {
+                    player.pauseVideo();
+                }
+                player.seekTo(data.time, true);
+            } else if (data.action === 'seek') {
+                player.seekTo(data.time, true);
+            } else if (data.action === 'speed') {
+                player.setPlaybackRate(data.speed);
+            }
+
+            // Reset remote flag
+            setTimeout(() => {
+                isRemoteEvent = false;
+            }, 300);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "private-drive-stream-server",
+  "version": "1.0.0",
+  "description": "Private video streaming service proxy for Google Drive",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "googleapis": "^140.0.0",
+    "ws": "^8.21.0"
+  }
+}
