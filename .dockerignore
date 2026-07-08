@@ -1,0 +1,5 @@
+android/
+.git/
+.gitignore
+node_modules/
+server/node_modules/
