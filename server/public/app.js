@@ -1390,3 +1390,86 @@ window.addEventListener('popstate', (event) => {
     }
     isHandlingPopState = false;
 });
+
+// TV Remote D-Pad & Keyboard Controls for Video Playback
+window.addEventListener('keydown', (e) => {
+    // 1. If video player modal is not open, ignore keyboard events
+    if (videoModal.classList.contains('hidden')) return;
+
+    // 2. Ignore keydown events if user is currently focusing on input elements
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+        return;
+    }
+
+    const iframe = document.getElementById('youtubePlayerIframe');
+    const isDriveVideo = !videoPlayer.classList.contains('hidden');
+    const isYTVideo = !iframe.classList.contains('hidden');
+
+    if (isDriveVideo) {
+        switch (e.key) {
+            case 'ArrowLeft':
+                e.preventDefault();
+                videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 10);
+                if (roomId) {
+                    sendPartySync('seek', videoPlayer.currentTime);
+                }
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                videoPlayer.currentTime = Math.min(videoPlayer.duration || 0, videoPlayer.currentTime + 10);
+                if (roomId) {
+                    sendPartySync('seek', videoPlayer.currentTime);
+                }
+                break;
+            case ' ':
+            case 'Enter':
+                e.preventDefault();
+                togglePlayPause();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                videoPlayer.volume = Math.min(1, videoPlayer.volume + 0.1);
+                customVolumeBar.value = Math.round(videoPlayer.volume * 100);
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                videoPlayer.volume = Math.max(0, videoPlayer.volume - 0.1);
+                customVolumeBar.value = Math.round(videoPlayer.volume * 100);
+                break;
+            case 'Escape':
+                e.preventDefault();
+                closeVideoPlayer();
+                break;
+        }
+    } else if (isYTVideo) {
+        // Send control messages directly to the YouTube iframe API handler
+        switch (e.key) {
+            case 'ArrowLeft':
+                e.preventDefault();
+                iframe.contentWindow.postMessage({ type: 'control', action: 'seekBackward' }, '*');
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                iframe.contentWindow.postMessage({ type: 'control', action: 'seekForward' }, '*');
+                break;
+            case ' ':
+            case 'Enter':
+                e.preventDefault();
+                iframe.contentWindow.postMessage({ type: 'control', action: 'togglePlay' }, '*');
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                iframe.contentWindow.postMessage({ type: 'control', action: 'volumeUp' }, '*');
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                iframe.contentWindow.postMessage({ type: 'control', action: 'volumeDown' }, '*');
+                break;
+            case 'Escape':
+                e.preventDefault();
+                closeVideoPlayer();
+                break;
+        }
+    }
+});
