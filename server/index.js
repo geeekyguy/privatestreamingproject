@@ -24,7 +24,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Simple Local Database file
-let db = { users: {} };
+let db = { users: {}, sessions: {} };
 if (fs.existsSync(DB_PATH)) {
   try {
     db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
@@ -33,12 +33,15 @@ if (fs.existsSync(DB_PATH)) {
   }
 }
 
+if (!db.users) db.users = {};
+if (!db.sessions) db.sessions = {};
+
 const saveDb = () => {
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 };
 
-// In-memory Session Store (sessionToken -> username)
-const sessions = {};
+// Persistent Session Store (sessionToken -> username)
+const sessions = db.sessions;
 
 // Hash password utility using built-in PBKDF2
 const hashPassword = (password, salt) => {
@@ -125,11 +128,11 @@ app.post('/api/register', (req, res) => {
     securityAnswerHash: securityAnswerHash,
     googleTokens: null
   };
-  saveDb();
 
   // Create session
   const token = crypto.randomBytes(32).toString('hex');
   sessions[token] = normalizedUser;
+  saveDb();
 
   res.json({ success: true, token, username: username.trim() });
 });
@@ -197,6 +200,7 @@ app.post('/api/login', (req, res) => {
   // Create session
   const token = crypto.randomBytes(32).toString('hex');
   sessions[token] = normalizedUser;
+  saveDb();
 
   res.json({ success: true, token, username: user.username });
 });
@@ -204,6 +208,7 @@ app.post('/api/login', (req, res) => {
 // Logout session
 app.post('/api/session-logout', validateSession, (req, res) => {
   delete sessions[req.sessionToken];
+  saveDb();
   res.json({ success: true });
 });
 
@@ -290,6 +295,7 @@ app.get('/oauth2callback', async (req, res) => {
       // Create session
       const token = crypto.randomBytes(32).toString('hex');
       sessions[token] = normalizedUser;
+      saveDb();
 
       console.log(`Direct Google Login successful for: ${normalizedUser}`);
       return res.redirect(`/?loginToken=${token}&username=${encodeURIComponent(name)}`);
