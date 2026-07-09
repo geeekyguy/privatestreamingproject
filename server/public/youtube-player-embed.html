@@ -188,6 +188,84 @@
                 isRemoteEvent = false;
             }, 300);
         }
+
+        // Listen for keyboard events (TV remote D-Pad controls)
+        window.addEventListener('keydown', (e) => {
+            if (!player || typeof player.getCurrentTime !== 'function') return;
+
+            const currentTime = player.getCurrentTime();
+            const currentSpeed = player.getPlaybackRate();
+            const state = player.getPlayerState();
+
+            switch (e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    const targetLeft = Math.max(0, currentTime - 10);
+                    player.seekTo(targetLeft, true);
+                    sendPartySync('seek', targetLeft, currentSpeed);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    const duration = player.getDuration() || 0;
+                    const targetRight = Math.min(duration, currentTime + 10);
+                    player.seekTo(targetRight, true);
+                    sendPartySync('seek', targetRight, currentSpeed);
+                    break;
+                case ' ':
+                case 'Enter':
+                    e.preventDefault();
+                    if (state === YT.PlayerState.PLAYING) {
+                        player.pauseVideo();
+                        sendPartySync('pause', currentTime, currentSpeed);
+                    } else {
+                        player.playVideo();
+                        sendPartySync('play', currentTime, currentSpeed);
+                    }
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    player.setVolume(Math.min(100, player.getVolume() + 10));
+                    break;
+                case 'ArrowDown':
+                    e.preventDefault();
+                    player.setVolume(Math.max(0, player.getVolume() - 10));
+                    break;
+            }
+        });
+
+        // Listen for control postMessages from the parent page
+        window.addEventListener('message', (event) => {
+            if (!player || typeof player.getCurrentTime !== 'function') return;
+            const data = event.data;
+            if (data && data.type === 'control') {
+                const currentTime = player.getCurrentTime();
+                const currentSpeed = player.getPlaybackRate();
+                const state = player.getPlayerState();
+                
+                if (data.action === 'seekBackward') {
+                    const target = Math.max(0, currentTime - 10);
+                    player.seekTo(target, true);
+                    sendPartySync('seek', target, currentSpeed);
+                } else if (data.action === 'seekForward') {
+                    const duration = player.getDuration() || 0;
+                    const target = Math.min(duration, currentTime + 10);
+                    player.seekTo(target, true);
+                    sendPartySync('seek', target, currentSpeed);
+                } else if (data.action === 'togglePlay') {
+                    if (state === YT.PlayerState.PLAYING) {
+                        player.pauseVideo();
+                        sendPartySync('pause', currentTime, currentSpeed);
+                    } else {
+                        player.playVideo();
+                        sendPartySync('play', currentTime, currentSpeed);
+                    }
+                } else if (data.action === 'volumeUp') {
+                    player.setVolume(Math.min(100, player.getVolume() + 10));
+                } else if (data.action === 'volumeDown') {
+                    player.setVolume(Math.max(0, player.getVolume() - 10));
+                }
+            }
+        });
     </script>
 </body>
 </html>
