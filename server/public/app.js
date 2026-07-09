@@ -113,6 +113,9 @@ const customMuteBtn = document.getElementById('customMuteBtn');
 const customTimeLabel = document.getElementById('customTimeLabel');
 const customSpeedSelect = document.getElementById('customSpeedSelect');
 const playerCenterPlay = document.getElementById('playerCenterPlay');
+
+const customSkipBackBtn = document.getElementById('customSkipBackBtn');
+const customSkipForwardBtn = document.getElementById('customSkipForwardBtn');
 const playArrowOverlay = playerCenterPlay.querySelector('.play-arrow-overlay');
 
 const customTheaterBtn = document.getElementById('customTheaterBtn');
@@ -153,6 +156,8 @@ googleSignInBtn.addEventListener('click', handleGoogleSignInClick);
 // Custom Player Event Listeners
 customPlayBtn.addEventListener('click', togglePlayPause);
 playerCenterPlay.addEventListener('click', togglePlayPause);
+customSkipBackBtn.addEventListener('click', handleSkipBack);
+customSkipForwardBtn.addEventListener('click', handleSkipForward);
 videoPlayer.addEventListener('play', handleVideoPlay);
 videoPlayer.addEventListener('pause', handleVideoPause);
 videoPlayer.addEventListener('timeupdate', handleVideoTimeUpdate);
@@ -730,6 +735,20 @@ function togglePlayPause() {
         videoPlayer.play();
     } else {
         videoPlayer.pause();
+    }
+}
+
+function handleSkipBack() {
+    videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 30);
+    if (roomId) {
+        sendPartySync('seek', videoPlayer.currentTime);
+    }
+}
+
+function handleSkipForward() {
+    videoPlayer.currentTime = Math.min(videoPlayer.duration || 0, videoPlayer.currentTime + 30);
+    if (roomId) {
+        sendPartySync('seek', videoPlayer.currentTime);
     }
 }
 
